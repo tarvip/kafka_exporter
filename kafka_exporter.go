@@ -52,7 +52,9 @@ var (
 type Exporter struct {
 	client                  sarama.Client
 	topicFilter             *regexp.Regexp
+	topicExclude            *regexp.Regexp
 	groupFilter             *regexp.Regexp
+	groupExclude            *regexp.Regexp
 	mu                      sync.Mutex
 	useZooKeeperLag         bool
 	zookeeperClient         *kazoo.Kazoo
@@ -113,7 +115,7 @@ func canReadFile(path string) bool {
 }
 
 // NewExporter returns an initialized Exporter.
-func NewExporter(opts kafkaOpts, topicFilter string, groupFilter string) (*Exporter, error) {
+func NewExporter(opts kafkaOpts, topicFilter string, topicExclude string, groupFilter string, groupExclude string) (*Exporter, error) {
 	var zookeeperClient *kazoo.Kazoo
 	config := sarama.NewConfig()
 	config.ClientID = clientID
@@ -190,7 +192,9 @@ func NewExporter(opts kafkaOpts, topicFilter string, groupFilter string) (*Expor
 	return &Exporter{
 		client:                  client,
 		topicFilter:             regexp.MustCompile(topicFilter),
+		topicExclude:            regexp.MustCompile(topicExclude),
 		groupFilter:             regexp.MustCompile(groupFilter),
+		groupExclude:            regexp.MustCompile(groupExclude),
 		useZooKeeperLag:         opts.useZooKeeperLag,
 		zookeeperClient:         zookeeperClient,
 		nextMetadataRefresh:     time.Now(),
@@ -247,7 +251,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 	getTopicMetrics := func(topic string) {
 		defer wg.Done()
-		if e.topicFilter.MatchString(topic) {
+		if e.topicFilter.MatchString(topic) && !e.topicExclude.MatchString(topic) {
 			partitions, err := e.client.Partitions(topic)
 			if err != nil {
 				plog.Errorf("Cannot get partitions of topic %s: %v", topic, err)
@@ -372,7 +376,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		}
 		groupIds := make([]string, 0)
 		for groupId := range groups.Groups {
-			if e.groupFilter.MatchString(groupId) {
+			if e.groupFilter.MatchString(groupId) && !e.groupExclude.MatchString(groupId) {
 				groupIds = append(groupIds, groupId)
 			}
 		}
@@ -468,29 +472,31 @@ func init() {
 
 func main() {
 	var (
-		listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9308").String()
-		metricsPath   = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default("/metrics").String()
-		topicFilter   = kingpin.Flag("topic.filter", "Regex that determines which topics to collect.").Default(".*").String()
-		groupFilter   = kingpin.Flag("group.filter", "Regex that determines which consumer groups to collect.").Default(".*").String()
-		logSarama     = kingpin.Flag("log.enable-sarama", "Turn on Sarama logging.").Default("false").Bool()
+		listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9308").Envar("WEB_LISTEN_ADDRESS").String()
+		metricsPath   = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default("/metrics").Envar("WEB_TELEMETRY_PATH").String()
+		topicFilter   = kingpin.Flag("topic.filter", "Regex that determines which topics to collect.").Default(".*").Envar("TOPIC_FILTER").String()
+		topicExclude  = kingpin.Flag("topic.exclude", "Regex that determines which topics to exclude.").Default("").Envar("TOPIC_EXCLUDE").String()
+		groupFilter   = kingpin.Flag("group.filter", "Regex that determines which consumer groups to collect.").Default(".*").Envar("GROUP_FILTER").String()
+		groupExclude  = kingpin.Flag("group.exclude", "Regex that determines which consumer groups to exclude.").Default("").Envar("GROUP_EXCLUDE").String()
+		logSarama     = kingpin.Flag("log.enable-sarama", "Turn on Sarama logging.").Default("false").Envar("LOG_ENABLE_SARAMA").Bool()
 
 		opts = kafkaOpts{}
 	)
-	kingpin.Flag("kafka.server", "Address (host:port) of Kafka server.").Default("kafka:9092").StringsVar(&opts.uri)
-	kingpin.Flag("sasl.enabled", "Connect using SASL/PLAIN.").Default("false").BoolVar(&opts.useSASL)
-	kingpin.Flag("sasl.handshake", "Only set this to false if using a non-Kafka SASL proxy.").Default("true").BoolVar(&opts.useSASLHandshake)
-	kingpin.Flag("sasl.username", "SASL user name.").Default("").StringVar(&opts.saslUsername)
-	kingpin.Flag("sasl.password", "SASL user password.").Default("").StringVar(&opts.saslPassword)
-	kingpin.Flag("tls.enabled", "Connect using TLS.").Default("false").BoolVar(&opts.useTLS)
-	kingpin.Flag("tls.ca-file", "The optional certificate authority file for TLS client authentication.").Default("").StringVar(&opts.tlsCAFile)
-	kingpin.Flag("tls.cert-file", "The optional certificate file for client authentication.").Default("").StringVar(&opts.tlsCertFile)
-	kingpin.Flag("tls.key-file", "The optional key file for client authentication.").Default("").StringVar(&opts.tlsKeyFile)
-	kingpin.Flag("tls.insecure-skip-tls-verify", "If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure.").Default("false").BoolVar(&opts.tlsInsecureSkipTLSVerify)
-	kingpin.Flag("kafka.version", "Kafka broker version").Default(sarama.V1_0_0_0.String()).StringVar(&opts.kafkaVersion)
-	kingpin.Flag("use.consumelag.zookeeper", "if you need to use a group from zookeeper").Default("false").BoolVar(&opts.useZooKeeperLag)
-	kingpin.Flag("zookeeper.server", "Address (hosts) of zookeeper server.").Default("localhost:2181").StringsVar(&opts.uriZookeeper)
-	kingpin.Flag("kafka.labels", "Kafka cluster name").Default("").StringVar(&opts.labels)
-	kingpin.Flag("refresh.metadata", "Metadata refresh interval").Default("30s").StringVar(&opts.metadataRefreshInterval)
+	kingpin.Flag("kafka.server", "Address (host:port) of Kafka server.").Default("kafka:9092").Envar("KAFKA_SERVER").StringsVar(&opts.uri)
+	kingpin.Flag("sasl.enabled", "Connect using SASL/PLAIN.").Default("false").Envar("SASL_ENABLED").BoolVar(&opts.useSASL)
+	kingpin.Flag("sasl.handshake", "Only set this to false if using a non-Kafka SASL proxy.").Default("true").Envar("SASL_HANDSHAKE").BoolVar(&opts.useSASLHandshake)
+	kingpin.Flag("sasl.username", "SASL user name.").Default("").Envar("SASL_USERNAME").StringVar(&opts.saslUsername)
+	kingpin.Flag("sasl.password", "SASL user password.").Default("").Envar("SASL_PASSWORD").StringVar(&opts.saslPassword)
+	kingpin.Flag("tls.enabled", "Connect using TLS.").Default("false").Envar("TLS_ENABLED").BoolVar(&opts.useTLS)
+	kingpin.Flag("tls.ca-file", "The optional certificate authority file for TLS client authentication.").Default("").Envar("TLS_CA_FILE").StringVar(&opts.tlsCAFile)
+	kingpin.Flag("tls.cert-file", "The optional certificate file for client authentication.").Default("").Envar("TLS_CERT_FILE").StringVar(&opts.tlsCertFile)
+	kingpin.Flag("tls.key-file", "The optional key file for client authentication.").Default("").Envar("TLS_KEY_FILE").StringVar(&opts.tlsKeyFile)
+	kingpin.Flag("tls.insecure-skip-tls-verify", "If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure.").Default("false").Envar("TLS_INSECURE_SKIP_TLS_VERIFY").BoolVar(&opts.tlsInsecureSkipTLSVerify)
+	kingpin.Flag("kafka.version", "Kafka broker version").Default(sarama.V1_0_0_0.String()).Envar("KAFKA_VERSION").StringVar(&opts.kafkaVersion)
+	kingpin.Flag("use.consumelag.zookeeper", "if you need to use a group from zookeeper").Default("false").Envar("USE_CONSUMELAG_ZOOKEEPER").BoolVar(&opts.useZooKeeperLag)
+	kingpin.Flag("zookeeper.server", "Address (hosts) of zookeeper server.").Default("localhost:2181").Envar("ZOOKEEPER_SERVER").StringsVar(&opts.uriZookeeper)
+	kingpin.Flag("kafka.labels", "Kafka cluster name").Default("").Envar("KAFKA_LABELS").StringVar(&opts.labels)
+	kingpin.Flag("refresh.metadata", "Metadata refresh interval").Default("30s").Envar("REFRESH_METADATA").StringVar(&opts.metadataRefreshInterval)
 
 	plog.AddFlags(kingpin.CommandLine)
 	kingpin.Version(version.Print("kafka_exporter"))
@@ -603,7 +609,7 @@ func main() {
 		sarama.Logger = log.New(os.Stdout, "[sarama] ", log.LstdFlags)
 	}
 
-	exporter, err := NewExporter(opts, *topicFilter, *groupFilter)
+	exporter, err := NewExporter(opts, *topicFilter, *topicExclude, *groupFilter, *groupExclude)
 	if err != nil {
 		plog.Fatalln(err)
 	}
