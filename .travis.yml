@@ -9,10 +9,11 @@ go:
 - 1.9
 
 after_success:
-- if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then
-  make docker;
-  make push;
-  fi
+#- if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then
+#  make docker;
+#  make push;
+#  fi
+- make docker push
 - if [[ -n "$TRAVIS_TAG" ]]; then
   make crossbuild release;
   fi
