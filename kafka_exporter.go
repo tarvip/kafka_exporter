@@ -251,7 +251,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 	getTopicMetrics := func(topic string) {
 		defer wg.Done()
-		if e.topicFilter.MatchString(topic) && !e.topicExclude.MatchString(topic) {
+		if e.topicFilter.MatchString(topic) && {
 			partitions, err := e.client.Partitions(topic)
 			if err != nil {
 				plog.Errorf("Cannot get partitions of topic %s: %v", topic, err)
@@ -376,7 +376,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		}
 		groupIds := make([]string, 0)
 		for groupId := range groups.Groups {
-			if e.groupFilter.MatchString(groupId) && !e.groupExclude.MatchString(groupId) {
+			if e.groupFilter.MatchString(groupId) {
 				groupIds = append(groupIds, groupId)
 			}
 		}
