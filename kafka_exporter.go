@@ -251,6 +251,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 	getTopicMetrics := func(topic string) {
 		defer wg.Done()
+		plog.Errorf("Testing: %v: %d",topic,e.topicExclude.MatchString(topic))
 		if e.topicFilter.MatchString(topic) && !e.topicExclude.MatchString(topic) {
 			partitions, err := e.client.Partitions(topic)
 			if err != nil {
