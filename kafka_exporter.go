@@ -251,7 +251,6 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 	getTopicMetrics := func(topic string) {
 		defer wg.Done()
-		plog.Errorf("Testing: %v: %t by topic exclude regex: %v",topic,e.topicExclude.MatchString(topic), e.topicExclude)
 		if e.topicFilter.MatchString(topic) && !e.topicExclude.MatchString(topic) {
 			partitions, err := e.client.Partitions(topic)
 			if err != nil {
@@ -377,7 +376,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		}
 		groupIds := make([]string, 0)
 		for groupId := range groups.Groups {
-			if e.groupFilter.MatchString(groupId) {
+			if e.groupFilter.MatchString(groupId) && !e.groupExclude.MatchString(groupId) {
 				groupIds = append(groupIds, groupId)
 			}
 		}
@@ -476,9 +475,9 @@ func main() {
 		listenAddress = kingpin.Flag("web.listen-address", "Address to listen on for web interface and telemetry.").Default(":9308").Envar("WEB_LISTEN_ADDRESS").String()
 		metricsPath   = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default("/metrics").Envar("WEB_TELEMETRY_PATH").String()
 		topicFilter   = kingpin.Flag("topic.filter", "Regex that determines which topics to collect.").Default(".*").Envar("TOPIC_FILTER").String()
-		topicExclude  = kingpin.Flag("topic.exclude", "Regex that determines which topics to exclude.").Default("").Envar("TOPIC_EXCLUDE").String()
+		topicExclude  = kingpin.Flag("topic.exclude", "Regex that determines which topics to exclude.").Default("^ ").Envar("TOPIC_EXCLUDE").String()
 		groupFilter   = kingpin.Flag("group.filter", "Regex that determines which consumer groups to collect.").Default(".*").Envar("GROUP_FILTER").String()
-		groupExclude  = kingpin.Flag("group.exclude", "Regex that determines which consumer groups to exclude.").Default("").Envar("GROUP_EXCLUDE").String()
+		groupExclude  = kingpin.Flag("group.exclude", "Regex that determines which consumer groups to exclude.").Default("^ ").Envar("GROUP_EXCLUDE").String()
 		logSarama     = kingpin.Flag("log.enable-sarama", "Turn on Sarama logging.").Default("false").Envar("LOG_ENABLE_SARAMA").Bool()
 
 		opts = kafkaOpts{}
