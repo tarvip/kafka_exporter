@@ -1,9 +1,12 @@
 package main
 
 import (
+	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"hash"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -21,6 +24,7 @@ import (
 	plog "github.com/prometheus/common/log"
 	"github.com/prometheus/common/version"
 	"github.com/rcrowley/go-metrics"
+	"github.com/xdg/scram"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -45,7 +49,34 @@ var (
 	consumergroupLagSum                *prometheus.Desc
 	consumergroupLagZookeeper          *prometheus.Desc
 	consumergroupMembers               *prometheus.Desc
+
+	sha256HashGenFcn scram.HashGeneratorFcn = func() hash.Hash { return sha256.New() }
+	sha512HashGenFcn scram.HashGeneratorFcn = func() hash.Hash { return sha512.New() }
 )
+
+type xdgSCRAMClient struct {
+	*scram.Client
+	*scram.ClientConversation
+	scram.HashGeneratorFcn
+}
+
+func (x *xdgSCRAMClient) Begin(userName, password, authzID string) (err error) {
+	x.Client, err = x.HashGeneratorFcn.NewClient(userName, password, authzID)
+	if err != nil {
+		return err
+	}
+	x.ClientConversation = x.Client.NewConversation()
+	return nil
+}
+
+func (x *xdgSCRAMClient) Step(challenge string) (response string, err error) {
+	response, err = x.ClientConversation.Step(challenge)
+	return
+}
+
+func (x *xdgSCRAMClient) Done() bool {
+	return x.ClientConversation.Done()
+}
 
 // Exporter collects Kafka stats from the given server and exports them using
 // the prometheus metrics package.
@@ -68,6 +99,7 @@ type kafkaOpts struct {
 	useSASLHandshake         bool
 	saslUsername             string
 	saslPassword             string
+	saslMechanism            string
 	useTLS                   bool
 	tlsCAFile                string
 	tlsCertFile              string
@@ -135,6 +167,19 @@ func NewExporter(opts kafkaOpts, topicFilter string, topicExclude string, groupF
 
 		if opts.saslPassword != "" {
 			config.Net.SASL.Password = opts.saslPassword
+		}
+
+		if opts.saslMechanism != "" {
+
+			if opts.saslMechanism == sarama.SASLTypeSCRAMSHA512 {
+				config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &xdgSCRAMClient{HashGeneratorFcn: sha512HashGenFcn} }
+				config.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeSCRAMSHA512)
+			} else if opts.saslMechanism == sarama.SASLTypeSCRAMSHA256 {
+				config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &xdgSCRAMClient{HashGeneratorFcn: sha256HashGenFcn} }
+				config.Net.SASL.Mechanism = sarama.SASLMechanism(sarama.SASLTypeSCRAMSHA256)
+			} else {
+				plog.Fatalf("Invalid SASL_MECHANISM \"%s\": can be either \"%s\" or \"%s\"\n", opts.saslMechanism, sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512)
+			}
 		}
 	}
 
@@ -487,6 +532,7 @@ func main() {
 	kingpin.Flag("sasl.handshake", "Only set this to false if using a non-Kafka SASL proxy.").Default("true").Envar("SASL_HANDSHAKE").BoolVar(&opts.useSASLHandshake)
 	kingpin.Flag("sasl.username", "SASL user name.").Default("").Envar("SASL_USERNAME").StringVar(&opts.saslUsername)
 	kingpin.Flag("sasl.password", "SASL user password.").Default("").Envar("SASL_PASSWORD").StringVar(&opts.saslPassword)
+	kingpin.Flag("sasl.mechanism", "SASL mechanism.").Default("").Envar("SASL_MECHANISM").StringVar(&opts.saslMechanism)
 	kingpin.Flag("tls.enabled", "Connect using TLS.").Default("false").Envar("TLS_ENABLED").BoolVar(&opts.useTLS)
 	kingpin.Flag("tls.ca-file", "The optional certificate authority file for TLS client authentication.").Default("").Envar("TLS_CA_FILE").StringVar(&opts.tlsCAFile)
 	kingpin.Flag("tls.cert-file", "The optional certificate file for client authentication.").Default("").Envar("TLS_CERT_FILE").StringVar(&opts.tlsCertFile)

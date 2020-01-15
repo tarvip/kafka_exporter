@@ -9,5 +9,6 @@ require (
 	github.com/prometheus/common v0.8.0
 	github.com/rcrowley/go-metrics v0.0.0-20190826022208-cac0b30c2563
 	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect
+	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
