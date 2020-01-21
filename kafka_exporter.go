@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	namespace = "kafka"
+	namespace = "kafka_exporter"
 	clientID  = "kafka_exporter"
 )
 
