@@ -98,6 +98,7 @@ This image is configurable using different flags
 | sasl.handshake               | SASL_HANDSHAKE               | true           | Only set this to false if using a non-Kafka SASL proxy                                              |
 | sasl.username                | SASL_USERNAME                |                | SASL user name                                                                                      |
 | sasl.password                | SASL_PASSWORD                |                | SASL user password                                                                                  |
+| sasl.mechanism               | SASL_MECHANISM               |                | SASL mechanism, valid values: [SCRAM-SHA-256, SCRAM-SHA-512]                                  |
 | tls.enabled                  | TLS_ENABLED                  | false          | Connect using TLS                                                                                   |
 | tls.ca-file                   | TLS_CA_FILE                  |                | The optional certificate authority file for TLS client authentication                                 |
 | tls.cert-file                 | TLS_CERT_FILE                |                | The optional certificate file for client authentication                                               |
@@ -115,6 +116,7 @@ This image is configurable using different flags
 | zookeeper.server             | ZOOKEEPER_SERVER             | localhost:2181 | Zookeeper server                                                                                    |
 | kafka.labels                 | KAFKA_LABELS                 |                | Kafka server name                                                                                   |
 | refresh.metadata             | REFRESH_METADATA             | 30s            | Metadata refresh interval                                                                           |
+| enabled.metric               | ENABLED_METRIC               |                | Export only some metrics, valid values: [brokers, partitions, partition_current_offset, partition_oldest_offset, partition_leader, partition_replicas, partition_in_sync_replica, partition_leader_is_preferred, partition_under_replicated_partition, current_offset, current_offset_sum, lag, lag_zookeeper, lag_sum, members] |
 
 ### Notes
 
