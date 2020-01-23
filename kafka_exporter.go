@@ -84,6 +84,12 @@ func (x *xdgSCRAMClient) Done() bool {
 	return x.ClientConversation.Done()
 }
 
+type topicPartitionConsumer struct {
+	topic           string
+	partition       int32
+	consumerGroupID string
+}
+
 // Exporter collects Kafka stats from the given server and exports them using
 // the prometheus metrics package.
 type Exporter struct {
@@ -280,6 +286,12 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 	offset := make(map[string]map[int32]int64)
 
+	var consumerLagSecondsInput map[int32]map[topicPartitionConsumer]int64
+
+	if metricsEnabled("lag_seconds") {
+		consumerLagSecondsInput = make(map[int32]map[topicPartitionConsumer]int64)
+	}
+
 	now := time.Now()
 
 	if now.After(e.nextMetadataRefresh) {
@@ -317,7 +329,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 			for _, partition := range partitions {
 				var broker *sarama.Broker
 				var err error
-				if val, ok := enabledMetrics["partition_leader"]; ok || metricDepsEnabled("partition_leader_is_preferred") {
+				if val, ok := enabledMetrics["partition_leader"]; ok || metricsEnabled("partition_leader_is_preferred") {
 					broker, err = e.client.Leader(topic, partition)
 					if err != nil {
 						plog.Errorf("Cannot get leader of topic %s partition %d: %v", topic, partition, err)
@@ -331,7 +343,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 				}
 
 				var currentOffset int64
-				if val, ok := enabledMetrics["partition_current_offset"]; ok || enableConsumerGroupMetrics || metricDepsEnabled("lag_zookeeper") {
+				if val, ok := enabledMetrics["partition_current_offset"]; ok || enableConsumerGroupMetrics || metricsEnabled("lag_zookeeper") {
 					currentOffset, err = e.client.GetOffset(topic, partition, sarama.OffsetNewest)
 
 					if err != nil {
@@ -361,7 +373,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 				}
 
 				var replicas []int32
-				if val, ok := enabledMetrics["partition_replicas"]; ok || metricDepsEnabled("partition_leader_is_preferred", "partition_under_replicated_partition") {
+				if val, ok := enabledMetrics["partition_replicas"]; ok || metricsEnabled("partition_leader_is_preferred", "partition_under_replicated_partition") {
 					replicas, err = e.client.Replicas(topic, partition)
 					if err != nil {
 						plog.Errorf("Cannot get replicas of topic %s partition %d: %v", topic, partition, err)
@@ -376,7 +388,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 				}
 
 				var inSyncReplicas []int32
-				if val, ok := enabledMetrics["partition_in_sync_replica"]; ok || metricDepsEnabled("partition_under_replicated_partition") {
+				if val, ok := enabledMetrics["partition_in_sync_replica"]; ok || metricsEnabled("partition_under_replicated_partition") {
 					inSyncReplicas, err = e.client.InSyncReplicas(topic, partition)
 					if err != nil {
 						plog.Errorf("Cannot get in-sync replicas of topic %s partition %d: %v", topic, partition, err)
@@ -454,7 +466,10 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 			plog.Errorf("Cannot connect to broker %d: %v", broker.ID(), err)
 			return
 		}
-		defer broker.Close()
+
+		if !metricsEnabled("lag_seconds") {
+			defer broker.Close()
+		}
 
 		groups, err := broker.ListGroups(&sarama.ListGroupsRequest{})
 		if err != nil {
@@ -508,6 +523,18 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 								continue
 							}
 							currentOffset := offsetFetchResponseBlock.Offset
+
+							if metricsEnabled("lag_seconds") {
+								broker, err := e.client.Leader(topic, partition)
+								if err != nil {
+									plog.Errorf("Cannot get leader of topic %s partition %d: %v", topic, partition, err)
+								} else {
+									e.mu.Lock()
+									consumerLagSecondsInput[broker.ID()][topicPartitionConsumer{topic: topic, partition: partition, consumerGroupID: group.GroupId}] = currentOffset
+									e.mu.Unlock()
+								}
+							}
+
 							currentOffsetSum += currentOffset
 							if val, ok := enabledMetrics["current_offset"]; ok {
 								ch <- prometheus.MustNewConstMetric(
@@ -551,20 +578,75 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		}
 	}
 
+	getConsumerGroupLagSeconds := func(broker *sarama.Broker, consumerLagSecondsInput map[topicPartitionConsumer]int64) {
+		defer wg.Done()
+		defer broker.Close()
+
+		if promDesc, ok := enabledMetrics["lag_seconds"]; ok {
+			for tpo, offset := range consumerLagSecondsInput {
+				fetchRequest := &sarama.FetchRequest{MaxWaitTime: 500, Version: 4}
+				fetchRequest.AddBlock(tpo.topic, tpo.partition, offset, 1) // maxBytes is also set on serverside anyway
+
+				response, err := broker.Fetch(fetchRequest)
+				if err != nil {
+					plog.Errorf("Failed to fetch messages %s, %d, %d: %v", tpo.topic, tpo.partition, offset, err)
+				} else {
+					currentTimestamp := time.Now()
+					offsetTimestamp := currentTimestamp
+
+					for _, partitions := range response.Blocks {
+						for _, respBlock := range partitions {
+							for _, r := range respBlock.RecordsSet {
+								if r.RecordBatch != nil {
+									if r.RecordBatch.FirstOffset != offset {
+										plog.Warnf("Offset mismatch %s, %d: %d (request) <-> %d (response) ", tpo.topic, tpo.partition, offset, r.RecordBatch.FirstOffset)
+									}
+									offsetTimestamp = r.RecordBatch.FirstTimestamp
+								}
+							}
+						}
+					}
+
+					ch <- prometheus.MustNewConstMetric(
+						promDesc, prometheus.GaugeValue, float64(currentTimestamp.Sub(offsetTimestamp).Seconds()), tpo.consumerGroupID, tpo.topic, strconv.FormatInt(int64(tpo.partition), 10),
+					)
+
+				}
+			}
+		}
+	}
+
 	if len(e.client.Brokers()) > 0 {
 		if enableConsumerGroupMetrics {
 			for _, broker := range e.client.Brokers() {
+				if metricsEnabled("lag_seconds") {
+					consumerLagSecondsInput[broker.ID()] = make(map[topicPartitionConsumer]int64)
+				}
+
 				wg.Add(1)
 				go getConsumerGroupMetrics(broker)
 			}
 			wg.Wait()
+
+			if metricsEnabled("lag_seconds") {
+				for _, broker := range e.client.Brokers() {
+
+					if val, ok := consumerLagSecondsInput[broker.ID()]; ok {
+						go getConsumerGroupLagSeconds(broker, val)
+					}
+
+					wg.Add(1)
+				}
+				wg.Wait()
+			}
 		}
+
 	} else {
 		plog.Errorln("No valid broker, cannot get consumer group metrics")
 	}
 }
 
-func metricDepsEnabled(metricNames ...string) bool {
+func metricsEnabled(metricNames ...string) bool {
 	for _, m := range metricNames {
 		if _, ok := enabledMetrics[m]; ok {
 			return true
@@ -727,6 +809,11 @@ func main() {
 	addEnabledMetric("consumergroup", "members",
 		"Amount of members in a consumer group",
 		[]string{"consumergroup"}, labels,
+	)
+
+	addEnabledMetric("consumergroup", "lag_seconds",
+		"Current Approximate Lag of a ConsumerGroup at Topic/Partition in seconds",
+		[]string{"consumergroup", "topic", "partition"}, labels,
 	)
 
 	if *logSarama {

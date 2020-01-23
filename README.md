@@ -31,7 +31,7 @@ Table of Contents
 Compatibility
 -------------
 
-Support [Apache Kafka](https://kafka.apache.org) version 0.10.1.0 (and later).
+Support [Apache Kafka](https://kafka.apache.org) version 0.11.0.0 (and later).
 
 Dependency
 ----------
