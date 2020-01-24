@@ -116,7 +116,7 @@ This image is configurable using different flags
 | zookeeper.server             | ZOOKEEPER_SERVER             | localhost:2181 | Zookeeper server                                                                                    |
 | kafka.labels                 | KAFKA_LABELS                 |                | Kafka server name                                                                                   |
 | refresh.metadata             | REFRESH_METADATA             | 30s            | Metadata refresh interval                                                                           |
-| enabled.metric               | ENABLED_METRIC               |                | Export only some metrics, valid values: [brokers, partitions, partition_current_offset, partition_oldest_offset, partition_leader, partition_replicas, partition_in_sync_replica, partition_leader_is_preferred, partition_under_replicated_partition, current_offset, current_offset_sum, lag, lag_zookeeper, lag_sum, members] |
+| enabled.metric               | ENABLED_METRIC               |                | Export only some metrics, valid values: [brokers, partitions, partition_current_offset, partition_oldest_offset, partition_leader, partition_replicas, partition_in_sync_replica, partition_leader_is_preferred, partition_under_replicated_partition, current_offset, current_offset_sum, lag, lag_seconds, lag_zookeeper, lag_sum, members] |
 
 ### Notes
 
@@ -140,14 +140,14 @@ For details on the underlying metrics please see [Apache Kafka](https://kafka.ap
 
 | Name            | Exposed informations                   |
 | --------------- | -------------------------------------- |
-| `kafka_brokers` | Number of Brokers in the Kafka Cluster |
+| `kafka_exporter_brokers` | Number of Brokers in the Kafka Cluster |
 
 **Metrics output example**
 
 ```txt
-# HELP kafka_brokers Number of Brokers in the Kafka Cluster.
-# TYPE kafka_brokers gauge
-kafka_brokers 3
+# HELP kafka_exporter_brokers Number of Brokers in the Kafka Cluster.
+# TYPE kafka_exporter_brokers gauge
+kafka_exporter_brokers 3
 ```
 
 ### Topics
@@ -156,49 +156,49 @@ kafka_brokers 3
 
 | Name                                               | Exposed informations                                |
 | -------------------------------------------------- | --------------------------------------------------- |
-| `kafka_topic_partitions`                           | Number of partitions for this Topic                 |
-| `kafka_topic_partition_current_offset`             | Current Offset of a Broker at Topic/Partition       |
-| `kafka_topic_partition_oldest_offset`              | Oldest Offset of a Broker at Topic/Partition        |
-| `kafka_topic_partition_in_sync_replica`            | Number of In-Sync Replicas for this Topic/Partition |
-| `kafka_topic_partition_leader`                     | Leader Broker ID of this Topic/Partition            |
-| `kafka_topic_partition_leader_is_preferred`        | 1 if Topic/Partition is using the Preferred Broker  |
-| `kafka_topic_partition_replicas`                   | Number of Replicas for this Topic/Partition         |
-| `kafka_topic_partition_under_replicated_partition` | 1 if Topic/Partition is under Replicated            |
+| `kafka_exporter_topic_partitions`                           | Number of partitions for this Topic                 |
+| `kafka_exporter_topic_partition_current_offset`             | Current Offset of a Broker at Topic/Partition       |
+| `kafka_exporter_topic_partition_oldest_offset`              | Oldest Offset of a Broker at Topic/Partition        |
+| `kafka_exporter_topic_partition_in_sync_replica`            | Number of In-Sync Replicas for this Topic/Partition |
+| `kafka_exporter_topic_partition_leader`                     | Leader Broker ID of this Topic/Partition            |
+| `kafka_exporter_topic_partition_leader_is_preferred`        | 1 if Topic/Partition is using the Preferred Broker  |
+| `kafka_exporter_topic_partition_replicas`                   | Number of Replicas for this Topic/Partition         |
+| `kafka_exporter_topic_partition_under_replicated_partition` | 1 if Topic/Partition is under Replicated            |
 
 **Metrics output example**
 
 ```txt
-# HELP kafka_topic_partitions Number of partitions for this Topic
-# TYPE kafka_topic_partitions gauge
-kafka_topic_partitions{topic="__consumer_offsets"} 50
+# HELP kafka_exporter_topic_partitions Number of partitions for this Topic
+# TYPE kafka_exporter_topic_partitions gauge
+kafka_exporter_topic_partitions{topic="__consumer_offsets"} 50
 
-# HELP kafka_topic_partition_current_offset Current Offset of a Broker at Topic/Partition
-# TYPE kafka_topic_partition_current_offset gauge
+# HELP kafka_exporter_topic_partition_current_offset Current Offset of a Broker at Topic/Partition
+# TYPE kafka_exporter_topic_partition_current_offset gauge
 kafka_topic_partition_current_offset{partition="0",topic="__consumer_offsets"} 0
 
-# HELP kafka_topic_partition_oldest_offset Oldest Offset of a Broker at Topic/Partition
-# TYPE kafka_topic_partition_oldest_offset gauge
-kafka_topic_partition_oldest_offset{partition="0",topic="__consumer_offsets"} 0
+# HELP kafka_exporter_topic_partition_oldest_offset Oldest Offset of a Broker at Topic/Partition
+# TYPE kafka_exporter_topic_partition_oldest_offset gauge
+kafka_exporter_topic_partition_oldest_offset{partition="0",topic="__consumer_offsets"} 0
 
-# HELP kafka_topic_partition_in_sync_replica Number of In-Sync Replicas for this Topic/Partition
-# TYPE kafka_topic_partition_in_sync_replica gauge
-kafka_topic_partition_in_sync_replica{partition="0",topic="__consumer_offsets"} 3
+# HELP kafka_exporter_topic_partition_in_sync_replica Number of In-Sync Replicas for this Topic/Partition
+# TYPE kafka_exporter_topic_partition_in_sync_replica gauge
+kafka_exporter_topic_partition_in_sync_replica{partition="0",topic="__consumer_offsets"} 3
 
-# HELP kafka_topic_partition_leader Leader Broker ID of this Topic/Partition
-# TYPE kafka_topic_partition_leader gauge
-kafka_topic_partition_leader{partition="0",topic="__consumer_offsets"} 0
+# HELP kafka_exporter_topic_partition_leader Leader Broker ID of this Topic/Partition
+# TYPE kafka_exporter_topic_partition_leader gauge
+kafka_exporter_topic_partition_leader{partition="0",topic="__consumer_offsets"} 0
 
-# HELP kafka_topic_partition_leader_is_preferred 1 if Topic/Partition is using the Preferred Broker
-# TYPE kafka_topic_partition_leader_is_preferred gauge
-kafka_topic_partition_leader_is_preferred{partition="0",topic="__consumer_offsets"} 1
+# HELP kafka_exporter_topic_partition_leader_is_preferred 1 if Topic/Partition is using the Preferred Broker
+# TYPE kafka_exporter_topic_partition_leader_is_preferred gauge
+kafka_exporter_topic_partition_leader_is_preferred{partition="0",topic="__consumer_offsets"} 1
 
-# HELP kafka_topic_partition_replicas Number of Replicas for this Topic/Partition
-# TYPE kafka_topic_partition_replicas gauge
-kafka_topic_partition_replicas{partition="0",topic="__consumer_offsets"} 3
+# HELP kafka_exporter_topic_partition_replicas Number of Replicas for this Topic/Partition
+# TYPE kafka_exporter_topic_partition_replicas gauge
+kafka_exporter_topic_partition_replicas{partition="0",topic="__consumer_offsets"} 3
 
-# HELP kafka_topic_partition_under_replicated_partition 1 if Topic/Partition is under Replicated
-# TYPE kafka_topic_partition_under_replicated_partition gauge
-kafka_topic_partition_under_replicated_partition{partition="0",topic="__consumer_offsets"} 0
+# HELP kafka_exporter_topic_partition_under_replicated_partition 1 if Topic/Partition is under Replicated
+# TYPE kafka_exporter_topic_partition_under_replicated_partition gauge
+kafka_exporter_topic_partition_under_replicated_partition{partition="0",topic="__consumer_offsets"} 0
 ```
 
 ### Consumer Groups
@@ -207,27 +207,21 @@ kafka_topic_partition_under_replicated_partition{partition="0",topic="__consumer
 
 | Name                                 | Exposed informations                                          |
 | ------------------------------------ | ------------------------------------------------------------- |
-| `kafka_consumergroup_current_offset` | Current Offset of a ConsumerGroup at Topic/Partition          |
-| `kafka_consumergroup_lag`            | Current Approximate Lag of a ConsumerGroup at Topic/Partition |
+| `kafka_exporter_consumergroup_current_offset` | Current Offset of a ConsumerGroup at Topic/Partition          |
+| `kafka_exporter_consumergroup_lag`            | Current Approximate Lag of a ConsumerGroup at Topic/Partition |
+| `kafka_exporter_consumergroup_lag_seconds`    | Current Approximate Lag of a ConsumerGroup at Topic/Partition in seconds |
 
 **Metrics output example**
 
 ```txt
-# HELP kafka_consumergroup_current_offset Current Offset of a ConsumerGroup at Topic/Partition
-# TYPE kafka_consumergroup_current_offset gauge
-kafka_consumergroup_current_offset{consumergroup="KMOffsetCache-kafka-manager-3806276532-ml44w",partition="0",topic="__consumer_offsets"} -1
+# HELP kafka_exporter_consumergroup_current_offset Current Offset of a ConsumerGroup at Topic/Partition
+# TYPE kafka_exporter_consumergroup_current_offset gauge
+kafka_exporter_consumergroup_current_offset{consumergroup="KMOffsetCache-kafka-manager-3806276532-ml44w",partition="0",topic="__consumer_offsets"} -1
 
-# HELP kafka_consumergroup_lag Current Approximate Lag of a ConsumerGroup at Topic/Partition
-# TYPE kafka_consumergroup_lag gauge
-kafka_consumergroup_lag{consumergroup="KMOffsetCache-kafka-manager-3806276532-ml44w",partition="0",topic="__consumer_offsets"} 1
+# HELP kafka_exporter_consumergroup_lag Current Approximate Lag of a ConsumerGroup at Topic/Partition
+# TYPE kafka_exporter_consumergroup_lag gauge
+kafka_exporter_consumergroup_lag{consumergroup="KMOffsetCache-kafka-manager-3806276532-ml44w",partition="0",topic="__consumer_offsets"} 1
 ```
-
-Grafana Dashboard
--------
-
-Grafana Dashboard ID: 7589, name: Kafka Exporter Overview.
-
-For details of the dashboard please see [Kafka Exporter Overview](https://grafana.com/dashboards/7589).
 
 Contribute
 ----------
@@ -241,7 +235,7 @@ Donation
 
 Your donation will encourage me to continue to improve Kafka Exporter. Support Alipay donation.
 
-![](https://github.com/danielqsj/kafka_exporter/raw/master/alipay.jpg)
+link to https://github.com/danielqsj/kafka_exporter
 
 License
 -------
